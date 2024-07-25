@@ -1,5 +1,7 @@
 # tauri-bindgen-rs-macros
 
+![rust workflow](https://github.com/jvatic/tauri-bindgen-rs-macros/actions/workflows/rust.yml/badge.svg)
+
 This is an *experimental* crate to aid in generating Rust IPC bindings for [Tauri](https://tauri.app/) commands (for those of us who'd like to use Rust for the front-end). Please review the code before using it.
 
 ## Why
