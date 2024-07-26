@@ -105,6 +105,7 @@ pub fn invoke_bindings(attrs: TokenStream, tokens: TokenStream) -> TokenStream {
                 sig: fn_item.sig.clone(),
                 block: parse_quote!({
                     #[derive(::serde::Serialize)]
+                    #[serde(rename_all = "camelCase")]
                     struct Args {
                         #fields
                     }
