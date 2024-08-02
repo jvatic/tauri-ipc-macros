@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{
     self, braced,
@@ -7,8 +7,8 @@ use syn::{
     parse_macro_input, parse_quote,
     punctuated::{Pair, Punctuated},
     token::{self, Comma},
-    Field, FieldMutability, FnArg, Ident, ItemFn, ItemTrait, LitStr, Pat, Signature, Token,
-    TraitItem, Type, Visibility,
+    Field, FieldMutability, Fields, FnArg, Generics, Ident, ItemEnum, ItemFn, ItemTrait, LitStr,
+    Pat, Signature, Token, TraitItem, Type, Variant, Visibility,
 };
 
 #[derive(Default)]
@@ -135,6 +135,213 @@ pub fn invoke_bindings(attrs: TokenStream, tokens: TokenStream) -> TokenStream {
         #fn_items
     };
 
+    TokenStream::from(ret)
+}
+
+/// # Examples
+///
+/// ```ignore
+/// #[derive(Events, Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]
+/// enum Event {
+///     SomethingHappened { payload: Vec<u8> },
+///     SomeoneSaidHello(String),
+///     NoPayload,
+/// }
+///
+/// fn emit_event(app_handle: tauri::AppHandle, event: Event) -> anyhow::Result<()> {
+///     Ok(app_handle.emit(event.event_name(), event)?)
+/// }
+///
+/// // ...
+///
+/// let listener = EventBinding::SomethingHappened.listen(|event: Event| {
+///     // ...
+/// }).await;
+/// drop(listener); // unlisten
+/// ```
+#[proc_macro_derive(Events)]
+pub fn derive_event(tokens: TokenStream) -> TokenStream {
+    let item_enum = parse_macro_input!(tokens as ItemEnum);
+    let ItemEnum {
+        attrs: _,
+        vis,
+        enum_token: _,
+        ident,
+        generics,
+        brace_token: _,
+        variants,
+    } = item_enum;
+
+    fn derive_impl_display(
+        vis: Visibility,
+        _generics: Generics, // TODO: support generics
+        ident: Ident,
+        variants: Punctuated<Variant, Comma>,
+    ) -> TokenStream2 {
+        let match_arms: Punctuated<TokenStream2, Comma> = variants
+            .iter()
+            .map(|v| -> TokenStream2 {
+                let ident = ident.clone();
+                let v_ident = &v.ident;
+                let v_ident_str = v_ident.to_string();
+                let fields: TokenStream2 = match &v.fields {
+                    Fields::Unit => quote! {}.into(),
+                    Fields::Unnamed(fields) => {
+                        let placeholders: Punctuated<TokenStream2, Comma> = fields
+                            .unnamed
+                            .iter()
+                            .map(|_| -> TokenStream2 { quote! { _ }.into() })
+                            .collect();
+                        quote! { (#placeholders) }.into()
+                    }
+                    Fields::Named(fields) => {
+                        let placeholders: Punctuated<TokenStream2, Comma> = fields
+                            .named
+                            .iter()
+                            .map(|f| -> TokenStream2 {
+                                let ident = f.ident.as_ref().unwrap();
+                                quote! { #ident: _ }.into()
+                            })
+                            .collect();
+                        quote! { {#placeholders} }.into()
+                    }
+                };
+                quote! {
+                    #ident::#v_ident #fields => #v_ident_str
+                }
+                .into()
+            })
+            .collect();
+        let ret = quote! {
+            impl #ident {
+                #vis fn event_name(&self) -> &'static str {
+                    match self {
+                        #match_arms
+                    }
+                }
+            }
+        };
+        TokenStream2::from(ret)
+    }
+
+    fn derive_event_binding(
+        _generics: Generics, // TODO: support generics
+        ident: Ident,
+        variants: Punctuated<Variant, Comma>,
+    ) -> TokenStream2 {
+        let event_binding_ident =
+            Ident::new(&format!("{}Binding", ident.to_string()), Span::call_site());
+        let variant_names: Punctuated<Ident, Comma> =
+            variants.iter().map(|v| v.ident.clone()).collect();
+        let variant_to_str_match_arms: Punctuated<TokenStream2, Comma> = variants
+            .iter()
+            .map(|v| -> TokenStream2 {
+                let ident = &v.ident;
+                let ident_str = ident.to_string();
+                quote! {
+                    #event_binding_ident::#ident => #ident_str
+                }
+                .into()
+            })
+            .collect();
+        let ret = quote! {
+            pub enum #event_binding_ident {
+                #variant_names
+            }
+
+            impl #event_binding_ident {
+                pub async fn listen<F>(&self, handler: F) -> Result<EventListener, JsValue>
+                where
+                    F: Fn(#ident) + 'static,
+                {
+                    let event_name = self.as_str();
+                    EventListener::new(event_name, move |event| {
+                        let event: TauriEvent<#ident> = ::serde_wasm_bindgen::from_value(event).unwrap();
+                        handler(event.payload);
+                    })
+                    .await
+                }
+
+                fn as_str(&self) -> &str {
+                    match self {
+                        #variant_to_str_match_arms
+                    }
+                }
+            }
+        };
+        TokenStream2::from(ret)
+    }
+
+    // TODO: break this out into another crate (it doesn't need to be in a macro)
+    fn events_mod(vis: Visibility) -> TokenStream2 {
+        quote! {
+            use wasm_bindgen::prelude::*;
+
+            #[wasm_bindgen]
+            extern "C" {
+                #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "event"], catch)]
+                async fn listen(
+                    event_name: &str,
+                    handler: &Closure<dyn FnMut(JsValue)>,
+                ) -> Result<JsValue, JsValue>;
+            }
+
+            #vis struct EventListener {
+                event_name: String,
+                _closure: Closure<dyn FnMut(JsValue)>,
+                unlisten: js_sys::Function,
+            }
+
+            impl EventListener {
+                pub async fn new<F>(event_name: &str, handler: F) -> Result<Self, JsValue>
+                where
+                    F: Fn(JsValue) + 'static,
+                {
+                    let closure = Closure::new(handler);
+                    let unlisten = listen(event_name, &closure).await?;
+                    let unlisten = js_sys::Function::from(unlisten);
+
+                    tracing::trace!("EventListener created for {event_name}");
+
+                    Ok(Self {
+                        event_name: event_name.to_string(),
+                        _closure: closure,
+                        unlisten,
+                    })
+                }
+            }
+
+            impl Drop for EventListener {
+                fn drop(&mut self) {
+                    tracing::trace!("EventListener dropped for {}", self.event_name);
+                    let context = JsValue::null();
+                    self.unlisten.call0(&context).unwrap();
+                }
+            }
+
+            #[derive(::serde::Deserialize)]
+            struct TauriEvent<T> {
+                pub payload: T,
+            }
+        }
+    }
+
+    let impl_display = derive_impl_display(
+        vis.clone(),
+        generics.clone(),
+        ident.clone(),
+        variants.clone(),
+    );
+    let event_binding = derive_event_binding(generics, ident, variants);
+    let events_mod = events_mod(vis);
+
+    let ret = quote! {
+        #impl_display
+
+        #event_binding
+
+        #events_mod
+    };
     TokenStream::from(ret)
 }
 

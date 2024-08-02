@@ -10,7 +10,7 @@ I couldn't find a comfortable way of defining commands that would maintain type 
 
 ## Usage
 
-1. Create an intermediary crate in the workspace of your Tauri app to house traits defining your commands and generated IPC bindings to import into the Rust frontend, e.g:
+1. Create an intermediary crate in the workspace of your Tauri app to house traits defining your commands, events, and generated IPC bindings to import into the Rust frontend, e.g:
 
     ```toml
     [package]
@@ -19,7 +19,7 @@ I couldn't find a comfortable way of defining commands that would maintain type 
     version = "0.1.0"
 
     [dependencies]
-    tauri-bindgen-rs-macros = { version = "0.1.0", git = "https://github.com/jvatic/tauri-bindgen-rs-macros.git" }
+    tauri-bindgen-rs-macros = { version = "0.1.1", git = "https://github.com/jvatic/tauri-bindgen-rs-macros.git" }
     serde = { version = "1.0.204", features = ["derive"] }
     serde-wasm-bindgen = "0.6"
     wasm-bindgen = "0.2"
@@ -32,7 +32,16 @@ I couldn't find a comfortable way of defining commands that would maintain type 
     pub trait Commands {
         async hello(name: String) -> Result<String, String>;
     }
+
+    #[derive(tauri_bindgen_rs_macros::Events, Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]
+    enum Event {
+        SomethingHappened { payload: Vec<u8> },
+        SomeoneSaidHello(String),
+        NoPayload,
+    }
     ```
+
+    **NOTE:** If you have multiple enums deriving `Events`, these will need to be in separate modules since there's some common boilerplate types that are included currently (that will be moved into another crate at some point).
 
     And if you're using a plugin on the frontend and want bindings generated for it, you can do so by defining a trait for it, e.g:
 
@@ -46,9 +55,9 @@ I couldn't find a comfortable way of defining commands that would maintain type 
     }
     ```
 
-    **NOTE:** If you have multiple traits implementing `invoke_bindings` they'll each need to be in their own `mod` since an `invoke` WASM binding will be derived in scope of where the trait is defined.
+    **NOTE:** If you have multiple traits implementing `invoke_bindings` they'll each need to be in their own `mod` since an `invoke` WASM binding will be derived in scope of where the trait is defined (this will be moved into another crate at some point).
 
-2. Import the trait into your Tauri backend and wrap your command definitions in the `impl_trait` macro, e.g:
+2. Import the commands trait into your Tauri backend and wrap your command definitions in the `impl_trait` macro, e.g:
 
     ```rust
     use my_commands::Commands;
@@ -62,6 +71,15 @@ I couldn't find a comfortable way of defining commands that would maintain type 
 
     This will define a shadow struct with an `impl Commands` block with all the functions passed into the macro minus any fn generics or arguments where the type starts with `tauri::`, and spits out the actual fns untouched. The Rust compiler will then emit helpful errors if the defined commands are different (after being processed) from those in the trait, yay!
 
+3. Import the event enum into your Tauri backend if you wish to emit events from there, e.g.:
+
+    ```rust
+    use my_commands::Event;
+    fn emit_event(app_handle: tauri::AppHandle, event: Event) -> anyhow::Result<()> {
+        Ok(app_handle.emit(event.event_name(), event)?)
+    }
+    ```
+
 3. Use the generated IPC bindings in your Rust frontend, eg:
 
     ```rust
@@ -69,6 +87,13 @@ I couldn't find a comfortable way of defining commands that would maintain type 
     spawn_local(async move {
         let greeting = my_commands::hello(name).await.unwrap();
         set_greeting(greeting);
+    });
+    // ...
+    spawn_local(async move {
+        let listener = my_commands::EventBinding::SomethingHappened.listen(|event: my_commands::Event| {
+            // ...
+        }).await;
+        drop(listener); // unlisten
     });
     // ...
     ```
