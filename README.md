@@ -24,7 +24,7 @@ at solving this without changing too much about how the commands are defined.
     version = "0.1.0"
 
     [dependencies]
-    tauri-ipc-macros = { version = "0.1.2", git = "https://github.com/jvatic/tauri-bindgen-rs-macros.git" }
+    tauri-ipc-macros = { version = "0.1.2", git = "https://github.com/jvatic/tauri-ipc-macros.git" }
     serde = { version = "1.0.204", features = ["derive"] }
     serde-wasm-bindgen = "0.6"
     wasm-bindgen = "0.2"
