@@ -1,4 +1,4 @@
-# tauri-bindgen-rs-macros
+# tauri-ipc-macros
 
 ![rust workflow](https://github.com/jvatic/tauri-bindgen-rs-macros/actions/workflows/rust.yml/badge.svg)
 
@@ -19,7 +19,7 @@ I couldn't find a comfortable way of defining commands that would maintain type 
     version = "0.1.0"
 
     [dependencies]
-    tauri-bindgen-rs-macros = { version = "0.1.1", git = "https://github.com/jvatic/tauri-bindgen-rs-macros.git" }
+    tauri-ipc-macros = { version = "0.1.2", git = "https://github.com/jvatic/tauri-bindgen-rs-macros.git" }
     serde = { version = "1.0.204", features = ["derive"] }
     serde-wasm-bindgen = "0.6"
     wasm-bindgen = "0.2"
