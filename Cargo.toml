@@ -2,6 +2,11 @@
 edition = "2021"
 name = "tauri-ipc-macros"
 version = "0.1.2"
+description = "IPC bindings for using Tauri with a Rust Frontend (e.g. leptos)"
+license = "BSD-3-Clause"
+homepage = "https://github.com/jvatic/tauri-ipc-macros"
+repository = "https://github.com/jvatic/tauri-ipc-macros"
+authors = ["Jesse Stuart <rust@jessestuart.ca>"]
 
 [lib]
 proc-macro = true
