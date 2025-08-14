@@ -185,14 +185,14 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
                 let v_ident = &v.ident;
                 let v_ident_str = v_ident.to_string();
                 let fields: TokenStream2 = match &v.fields {
-                    Fields::Unit => quote! {}.into(),
+                    Fields::Unit => quote! {},
                     Fields::Unnamed(fields) => {
                         let placeholders: Punctuated<TokenStream2, Comma> = fields
                             .unnamed
                             .iter()
-                            .map(|_| -> TokenStream2 { quote! { _ }.into() })
+                            .map(|_| -> TokenStream2 { quote! { _ } })
                             .collect();
-                        quote! { (#placeholders) }.into()
+                        quote! { (#placeholders) }
                     }
                     Fields::Named(fields) => {
                         let placeholders: Punctuated<TokenStream2, Comma> = fields
@@ -200,16 +200,15 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
                             .iter()
                             .map(|f| -> TokenStream2 {
                                 let ident = f.ident.as_ref().unwrap();
-                                quote! { #ident: _ }.into()
+                                quote! { #ident: _ }
                             })
                             .collect();
-                        quote! { {#placeholders} }.into()
+                        quote! { {#placeholders} }
                     }
                 };
                 quote! {
                     #ident::#v_ident #fields => #v_ident_str
                 }
-                .into()
             })
             .collect();
         let ret = quote! {
@@ -221,7 +220,7 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
                 }
             }
         };
-        TokenStream2::from(ret)
+        ret
     }
 
     fn derive_event_binding(
@@ -230,7 +229,7 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
         variants: Punctuated<Variant, Comma>,
     ) -> TokenStream2 {
         let event_binding_ident =
-            Ident::new(&format!("{}Binding", ident.to_string()), Span::call_site());
+            Ident::new(&format!("{}Binding", ident), Span::call_site());
         let variant_names: Punctuated<Ident, Comma> =
             variants.iter().map(|v| v.ident.clone()).collect();
         let variant_to_str_match_arms: Punctuated<TokenStream2, Comma> = variants
@@ -241,7 +240,6 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
                 quote! {
                     #event_binding_ident::#ident => #ident_str
                 }
-                .into()
             })
             .collect();
         let ret = quote! {
@@ -269,7 +267,7 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
                 }
             }
         };
-        TokenStream2::from(ret)
+        ret
     }
 
     // TODO: break this out into another crate (it doesn't need to be in a macro)
