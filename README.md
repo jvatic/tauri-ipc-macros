@@ -1,6 +1,8 @@
 # tauri-ipc-macros
 
 ![rust workflow](https://github.com/jvatic/tauri-ipc-macros/actions/workflows/rust.yml/badge.svg)
+[![Crates.io Version](https://img.shields.io/crates/v/tauri-ipc-macros)](https://crates.io/crates/tauri-ipc-macros)
+[![docs.rs](https://img.shields.io/docsrs/tauri-ipc-macros)](https://docs.rs/tauri-ipc-macros)
 
 IPC bindings for using [Tauri](https://v2.tauri.app/) with a Rust Frontend (e.g.
 [leptos](https://v2.tauri.app/start/frontend/leptos/)).
