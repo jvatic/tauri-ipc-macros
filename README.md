@@ -1,5 +1,6 @@
 # tauri-ipc-macros
 
+[![License](https://img.shields.io/badge/License-3%20Clause%20BSD%20-blue.svg)](https://opensource.org/license/bsd-3-clause)
 ![rust workflow](https://github.com/jvatic/tauri-ipc-macros/actions/workflows/rust.yml/badge.svg)
 [![Crates.io Version](https://img.shields.io/crates/v/tauri-ipc-macros)](https://crates.io/crates/tauri-ipc-macros)
 [![docs.rs](https://img.shields.io/docsrs/tauri-ipc-macros)](https://docs.rs/tauri-ipc-macros)
