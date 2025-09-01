@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use quote::{quote, ToTokens, TokenStreamExt};
+use quote::{format_ident, quote, ToTokens, TokenStreamExt};
 use syn::{
     self, braced,
     parse::Parse,
@@ -190,7 +190,9 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
                         let placeholders: Punctuated<TokenStream2, Comma> = fields
                             .unnamed
                             .iter()
-                            .map(|_| -> TokenStream2 { quote! { _ } })
+                            .map(|_| -> TokenStream2 {
+                                quote! { _ }
+                            })
                             .collect();
                         quote! { (#placeholders) }
                     }
@@ -228,8 +230,7 @@ pub fn derive_event(tokens: TokenStream) -> TokenStream {
         ident: Ident,
         variants: Punctuated<Variant, Comma>,
     ) -> TokenStream2 {
-        let event_binding_ident =
-            Ident::new(&format!("{}Binding", ident), Span::call_site());
+        let event_binding_ident = Ident::new(&format!("{}Binding", ident), Span::call_site());
         let variant_names: Punctuated<Ident, Comma> =
             variants.iter().map(|v| v.ident.clone()).collect();
         let variant_to_str_match_arms: Punctuated<TokenStream2, Comma> = variants
@@ -396,18 +397,13 @@ impl<I: ToTokens> ToTokens for ItemList<I> {
 ///     async bar(foo: String) -> Result<(), String>;
 /// }
 ///
-/// // ignore this (here so the example can compile)
-/// mod tauri {
-///     struct State {}
-/// }
-///
 /// tauri_bindgen_rs_macros::impl_trait!(Commands, {
-///     // we'll also need a #[tauri::command] attribute here
+///     #[tauri::command]
 ///     async foo(state: tauri::State, bar: String) -> Result<(), String> {
 ///         Ok(())
 ///     }
 ///
-///     // we'll also need a #[tauri::command] attribute here
+///     #[tauri::command]
 ///     async bar(state: tauri::State, foo: String) -> Result<(), String> {
 ///         Ok(())
 ///     }
@@ -417,6 +413,7 @@ impl<I: ToTokens> ToTokens for ItemList<I> {
 pub fn impl_trait(tokens: TokenStream) -> TokenStream {
     let ImplTrait { trait_ident, fns } = parse_macro_input!(tokens as ImplTrait);
 
+    let mut fn_idents = Vec::new();
     let mut trait_fns = Vec::new();
 
     fn map_fn_input(mut item: Pair<FnArg, Comma>) -> Pair<FnArg, Comma> {
@@ -456,6 +453,9 @@ pub fn impl_trait(tokens: TokenStream) -> TokenStream {
 
     fns.list.iter().for_each(|func| {
         let sig = &func.sig;
+
+        fn_idents.push(sig.ident.clone());
+
         trait_fns.push(ItemFn {
             attrs: Vec::new(),
             vis: func.vis.clone(),
@@ -476,8 +476,13 @@ pub fn impl_trait(tokens: TokenStream) -> TokenStream {
         });
     });
 
-    let struct_name = Ident::new(format!("__Impl{}", trait_ident).as_str(), Span::call_site());
+    let struct_name = format_ident!("__Impl{}", trait_ident);
     let trait_fns = ItemList { list: trait_fns };
+    let generate_handler_macro_name = format_ident!(
+        "generate_{}_handler",
+        camel_to_snake_case(trait_ident.clone())
+    );
+    let generate_handler_macro_doc = format!("Expands to call [`::tauri::generate_handler`] with a list of all the fns defined in [`{}`]", trait_ident);
 
     let ret = quote! {
         struct #struct_name {}
@@ -487,7 +492,34 @@ pub fn impl_trait(tokens: TokenStream) -> TokenStream {
         }
 
         #fns
+
+        #[allow(unused)]
+        #[doc = #generate_handler_macro_doc]
+        macro_rules! #generate_handler_macro_name {
+            () => {
+                ::tauri::generate_handler![#(#fn_idents),*]
+            };
+        }
     };
 
     TokenStream::from(ret)
+}
+
+fn camel_to_snake_case(ident: Ident) -> Ident {
+    let snake_case: String = ident
+        .to_string()
+        .chars()
+        .enumerate()
+        .flat_map(|(i, c)| {
+            if c.is_uppercase() && i > 0 {
+                let mut ret = Vec::with_capacity(c.len_utf8() + 1);
+                ret.push('_');
+                ret.extend(c.to_lowercase());
+                ret
+            } else {
+                Vec::from_iter(c.to_lowercase())
+            }
+        })
+        .collect();
+    Ident::new(snake_case.as_str(), Span::call_site())
 }

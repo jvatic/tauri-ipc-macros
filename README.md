@@ -12,9 +12,7 @@ IPC bindings for using [Tauri](https://v2.tauri.app/) with a Rust Frontend (e.g.
 
 ## Why
 
-I couldn't find a comfortable way of defining commands that would maintain type
-safety with Tauri IPC bindings for a Rust Frontend. So this is a crude attempt
-at solving this without changing too much about how the commands are defined.
+I couldn't find a comfortable way of defining commands that would maintain type safety with Tauri IPC bindings for a Rust Frontend. So this is a crude attempt at solving this without changing too much about how the commands are defined.
 
 ## Usage
 
@@ -27,7 +25,7 @@ at solving this without changing too much about how the commands are defined.
     version = "0.1.0"
 
     [dependencies]
-    tauri-ipc-macros = { version = "0.1.2", git = "https://github.com/jvatic/tauri-ipc-macros.git" }
+    tauri-ipc-macros = "0.1.2"
     serde = { version = "1.0.204", features = ["derive"] }
     serde-wasm-bindgen = "0.6"
     wasm-bindgen = "0.2"
@@ -77,7 +75,7 @@ at solving this without changing too much about how the commands are defined.
     derived in scope of where the trait is defined (this will be moved into
     another module at some point).
 
-2. Import the commands trait into your Tauri backend and wrap your command definitions in the `impl_trait` macro, e.g:
+1. Import the commands trait into your Tauri backend and wrap your command definitions in the `impl_trait` macro, e.g:
 
     ```rust
     use my_commands::Commands;
@@ -96,13 +94,25 @@ at solving this without changing too much about how the commands are defined.
     errors if the defined commands are different (after being processed) from
     those in the trait, yay!
 
+    It will also generate a `generate_commands_handler` macro that calls `tauri::generate_handler!` with all the fn names defined for `Commands`.
+
     **NOTE:** The crudeness here is due to `#[tauri::command]`s needing to be
     top level fns and potentially having additional arguments in the siganture.
     And while I can imagine a way of abstracting this out of the API (so this
     could be a regular `impl` block), this was the easiest thing and works
     without changing much about how the commands are defined.
 
-3. Import the event enum into your Tauri backend if you wish to emit events from there, e.g.:
+1. Hook up the invoke handler:
+
+  ```rust
+    // ...
+    tauri::Builder::default()
+        // You can use the convenience macro or manually list all the commands like you'd noramlly do
+        .invoke_handler(generate_commands_handler!())
+    // ...
+  ```
+
+1. Import the event enum into your Tauri backend if you wish to emit events from there, e.g.:
 
     ```rust
     use my_commands::Event;
@@ -111,7 +121,7 @@ at solving this without changing too much about how the commands are defined.
     }
     ```
 
-3. Use the generated IPC bindings in your Rust frontend, eg:
+1. Use the generated IPC bindings in your Rust frontend, eg:
 
     ```rust
     // ...
